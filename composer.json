@@ -1,0 +1,55 @@
+{
+    "name": "a21/lexicon-client",
+    "description": "Laravel client for Lexicon: pull translation JSON exports from a central Lexicon server.",
+    "type": "library",
+    "license": "MIT",
+    "version": "1.0.0",
+    "keywords": [
+        "laravel",
+        "lexicon",
+        "translation",
+        "i18n",
+        "localization",
+        "a21"
+    ],
+    "authors": [
+        {
+            "name": "A21",
+            "homepage": "https://github.com/A21-Center"
+        }
+    ],
+    "homepage": "https://github.com/A21-Center/lexicon-client",
+    "support": {
+        "issues": "https://github.com/A21-Center/lexicon-client/issues",
+        "source": "https://github.com/A21-Center/lexicon-client"
+    },
+    "require": {
+        "php": "^8.1",
+        "illuminate/contracts": "^10.0",
+        "illuminate/http": "^10.0",
+        "illuminate/support": "^10.0"
+    },
+    "require-dev": {
+        "orchestra/testbench": "^8.0",
+        "phpunit/phpunit": "^10.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "A21\\LexiconClient\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "A21\\LexiconClient\\Tests\\": "tests/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "A21\\LexiconClient\\LexiconClientServiceProvider"
+            ]
+        }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}

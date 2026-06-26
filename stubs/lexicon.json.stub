@@ -1,0 +1,13 @@
+{
+  "client": "hub",
+  "project": "hub",
+  "environment": "local",
+  "default_locale": "en",
+  "output": {
+    "format": "nested_json",
+    "base_path": "public/locales",
+    "pattern": "{locale}/{area}.json"
+  },
+  "languages": ["fr", "ar", "de"],
+  "areas": ["catalog", "settings", "emails"]
+}
