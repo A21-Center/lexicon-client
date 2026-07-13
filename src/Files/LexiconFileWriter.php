@@ -74,7 +74,15 @@ class LexiconFileWriter
                 $allowWithoutState,
             )) {
                 $skipped++;
-                $nextHashes[$stateKey] = $contentHash;
+                // Only record hash as applied when we truly skip because Lexicon is
+                // unchanged AND local already matches (or seed without area scope).
+                if ($previous = ($knownHashes[$stateKey] ?? null)) {
+                    if ($previous === $contentHash) {
+                        $nextHashes[$stateKey] = $contentHash;
+                    }
+                } elseif (! $allowWithoutState) {
+                    $nextHashes[$stateKey] = $contentHash;
+                }
                 continue;
             }
 
@@ -114,27 +122,26 @@ class LexiconFileWriter
         string $contentHash,
         bool $allowWithoutState,
     ): bool {
-        // Lexicon content unchanged since last recorded hash → never rewrite.
+        $localMatches = is_file($absolutePath)
+            && $this->isUnchanged($absolutePath, $content, $encoded, $file, $format);
+
+        // --area / --full / --force scope: catch up local when it lags Lexicon,
+        // even if the Lexicon hash was already saved (common after git restore).
+        if ($allowWithoutState) {
+            return $localMatches;
+        }
+
+        // Daily pull: rewrite only when Lexicon content hash changed.
         if ($previousHash !== null && $previousHash === $contentHash) {
             return true;
         }
 
-        // Lexicon content changed since last pull → write.
         if ($previousHash !== null && $previousHash !== $contentHash) {
             return false;
         }
 
-        // No prior state: seed hash without writing (caller records contentHash).
-        // Next Lexicon change will write. Use --full/--area to write now.
-        if (! $allowWithoutState) {
-            return true;
-        }
-
-        if (! is_file($absolutePath)) {
-            return false;
-        }
-
-        return $this->isUnchanged($absolutePath, $content, $encoded, $file, $format);
+        // No prior state: seed hash only (caller stores it), do not mass-write.
+        return true;
     }
 
     /**
