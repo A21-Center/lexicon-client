@@ -317,4 +317,54 @@ PHP);
         $this->assertStringNotContainsString("'alt'", $body);
         $this->assertStringNotContainsString('placeholder', $body);
     }
+
+    public function test_add_missing_creates_nested_under_existing_root(): void
+    {
+        $base = sys_get_temp_dir().'/lexicon-client-test-'.uniqid();
+        @mkdir($base.'/en/domains', 0777, true);
+        $path = $base.'/en/domains/artworks.php';
+        file_put_contents($path, <<<'PHP'
+<?php
+
+return [
+    'artwork' => [
+        'draft' => [
+            'label' => 'Draft',
+        ],
+    ],
+];
+PHP);
+
+        $state = new PullStateStore($base.'/pull-state.json');
+        $writer = new LexiconFileWriter(pullState: $state);
+        $outcome = $writer->write([
+            [
+                'language' => 'en',
+                'area' => 'domains.artworks',
+                'relative_path' => 'domains/artworks.php',
+                'hash' => 'hash-nested',
+                'content' => [
+                    'artwork' => [
+                        'draft' => ['label' => 'Draft'],
+                        'ok' => [
+                            'c_bon' => 'c bon',
+                        ],
+                    ],
+                ],
+            ],
+        ], [
+            'base_path' => $base,
+            'pattern' => '{locale}/{relative_path}',
+            'format' => 'php',
+            'merge' => 'add_missing',
+        ], allowWithoutState: true);
+
+        $this->assertSame([$path], $outcome['written']);
+        $parsed = include $path;
+        $this->assertSame('c bon', $parsed['artwork']['ok']['c_bon']);
+        $this->assertSame('Draft', $parsed['artwork']['draft']['label']);
+        $body = (string) file_get_contents($path);
+        $this->assertStringContainsString("'ok'", $body);
+        $this->assertStringContainsString("'c_bon' => 'c bon'", $body);
+    }
 }

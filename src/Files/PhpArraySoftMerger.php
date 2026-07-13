@@ -92,8 +92,10 @@ class PhpArraySoftMerger
     }
 
     /**
-     * Missing leaves whose immediate parent array already exists in $existing,
-     * and whose Lexicon value is non-empty (skip blank placeholders).
+     * Missing leaves that may be soft-injected:
+     * - non-empty Lexicon values only
+     * - under an already-existing top-level branch (or new top-level leaf keys)
+     * Intermediate parents like artwork.ok may be created; brand-new roots (filters.*) are skipped.
      *
      * @param  array<string, mixed>  $existing
      * @param  array<string, mixed>  $incoming
@@ -108,7 +110,7 @@ class PhpArraySoftMerger
                 continue;
             }
 
-            if ($this->parentArrayExists($existing, (string) $path)) {
+            if ($this->rootBranchAllowsLeaf($existing, (string) $path)) {
                 $filtered[$path] = $value;
             }
         }
@@ -134,26 +136,22 @@ class PhpArraySoftMerger
         return true;
     }
 
-    private function parentArrayExists(array $existing, string $path): bool
+    /**
+     * Allow nested keys under an existing root array (artwork.ok.c_bon).
+     * Skip brand-new top-level trees (filters.panel.title when filters is absent).
+     * New top-level leaf keys (foo => "bar") are allowed.
+     */
+    private function rootBranchAllowsLeaf(array $existing, string $path): bool
     {
         $keys = explode('.', $path);
-        array_pop($keys);
 
-        if ($keys === []) {
+        if (count($keys) === 1) {
             return true;
         }
 
-        $cursor = $existing;
+        $root = $keys[0];
 
-        foreach ($keys as $key) {
-            if (! isset($cursor[$key]) || ! is_array($cursor[$key])) {
-                return false;
-            }
-
-            $cursor = $cursor[$key];
-        }
-
-        return true;
+        return isset($existing[$root]) && is_array($existing[$root]);
     }
 
     /**
