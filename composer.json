@@ -3,7 +3,6 @@
     "description": "Laravel client for Lexicon: export, pull, and import translations with a central Lexicon server.",
     "type": "library",
     "license": "MIT",
-    "version": "1.1.0",
     "keywords": [
         "laravel",
         "lexicon",

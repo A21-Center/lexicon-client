@@ -17,6 +17,7 @@ return [
 
     'http' => [
         'timeout' => 30,
+        'import_timeout' => 180,
         'retry_times' => 2,
         'retry_sleep_ms' => 200,
     ],

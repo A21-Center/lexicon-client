@@ -45,17 +45,17 @@ class LexiconHttpClient
      */
     public function import(array $payload): array
     {
-        return $this->request()
+        return $this->request(timeout: (int) config('lexicon.http.import_timeout', 180))
             ->post($this->endpoint('/client/import'), $payload)
             ->throw()
             ->json('data');
     }
 
-    private function request(): PendingRequest
+    private function request(?int $timeout = null): PendingRequest
     {
         $this->assertConfigured();
 
-        $timeout = (int) config('lexicon.http.timeout', 30);
+        $timeout ??= (int) config('lexicon.http.timeout', 30);
         $retryTimes = (int) config('lexicon.http.retry_times', 2);
         $retrySleep = (int) config('lexicon.http.retry_sleep_ms', 200);
 
