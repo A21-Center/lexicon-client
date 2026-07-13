@@ -4,9 +4,9 @@
   "environment": "local",
   "default_locale": "en",
   "output": {
-    "format": "nested_json",
-    "base_path": "public/locales",
-    "pattern": "{locale}/{area}.json"
+    "format": "php",
+    "base_path": "lang",
+    "pattern": "{locale}/{relative_path}"
   },
   "import": {
     "base_path": "lang",

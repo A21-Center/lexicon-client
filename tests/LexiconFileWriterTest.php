@@ -22,10 +22,42 @@ class LexiconFileWriterTest extends TestCase
         ], [
             'base_path' => $base,
             'pattern' => '{locale}/{area}.json',
+            'format' => 'nested_json',
         ]);
 
         $this->assertCount(1, $written);
         $this->assertFileExists($base.'/fr/catalog.json');
+    }
+
+    public function test_it_updates_existing_php_lang_files(): void
+    {
+        $base = sys_get_temp_dir().'/lexicon-client-test-'.uniqid();
+        @mkdir($base.'/en/domains', 0777, true);
+        file_put_contents($base.'/en/domains/artworks.php', "<?php\n\nreturn [\n    'artwork' => [\n        'draft' => ['label' => 'Draft'],\n    ],\n];\n");
+
+        $writer = new LexiconFileWriter();
+        $written = $writer->write([
+            [
+                'language' => 'en',
+                'area' => 'domains.artworks',
+                'relative_path' => 'domains/artworks.php',
+                'content' => [
+                    'artwork' => [
+                        'draft' => ['label' => 'Draft'],
+                        'test_sync' => 'test sync',
+                    ],
+                ],
+            ],
+        ], [
+            'base_path' => $base,
+            'pattern' => '{locale}/{relative_path}',
+            'format' => 'php',
+        ], false, true);
+
+        $this->assertSame([$base.'/en/domains/artworks.php'], $written);
+        $parsed = include $base.'/en/domains/artworks.php';
+        $this->assertSame('test sync', $parsed['artwork']['test_sync']);
+        $this->assertSame('Draft', $parsed['artwork']['draft']['label']);
     }
 
     public function test_it_skips_unchanged_files_when_hash_matches(): void
@@ -46,6 +78,7 @@ class LexiconFileWriterTest extends TestCase
         ], [
             'base_path' => $base,
             'pattern' => '{locale}/{area}.json',
+            'format' => 'nested_json',
         ]);
 
         $this->assertSame([], $written);

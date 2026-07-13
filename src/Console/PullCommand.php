@@ -34,7 +34,17 @@ class PullCommand extends Command
 
         $languages = $this->option('all') ? $config['languages'] : ($this->option('lang') ?: $config['languages']);
         $areas = $this->option('all') ? $config['areas'] : ($this->option('area') ?: $config['areas']);
-        $format = $this->option('format') ?: ($config['output']['format'] ?? 'nested_json');
+        $writerFormat = (string) ($config['output']['format'] ?? 'nested_json');
+        $exportFormat = in_array($writerFormat, ['php', 'laravel_php', 'nested_json', 'json'], true)
+            ? 'nested_json'
+            : (string) ($this->option('format') ?: $writerFormat);
+
+        if ($this->option('format')) {
+            $exportFormat = (string) $this->option('format');
+            if (in_array($exportFormat, ['php', 'laravel_php'], true)) {
+                $exportFormat = 'nested_json';
+            }
+        }
 
         try {
             $result = $client->export([
@@ -42,7 +52,7 @@ class PullCommand extends Command
                 'environment' => $config['environment'],
                 'languages' => array_values((array) $languages),
                 'areas' => array_values((array) $areas),
-                'format' => $format,
+                'format' => $exportFormat,
                 'only_approved' => (bool) $this->option('only-approved'),
             ]);
         } catch (\Throwable $exception) {

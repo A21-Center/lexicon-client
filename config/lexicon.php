@@ -10,9 +10,9 @@ return [
     'manifest' => base_path('lexicon.json'),
 
     'output' => [
-        'base_path' => public_path('locales'),
-        'pattern' => '{locale}/{area}.json',
-        'format' => 'nested_json',
+        'base_path' => env('LEXICON_OUTPUT_BASE_PATH', 'lang'),
+        'pattern' => env('LEXICON_OUTPUT_PATTERN', '{locale}/{relative_path}'),
+        'format' => env('LEXICON_OUTPUT_FORMAT', 'php'),
     ],
 
     'http' => [
