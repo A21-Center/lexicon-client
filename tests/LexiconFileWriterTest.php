@@ -249,4 +249,72 @@ PHP);
         $this->assertStringNotContainsString('filters', $body);
         $this->assertStringNotContainsString('خيارات', $body);
     }
+
+    public function test_add_missing_skips_empty_values(): void
+    {
+        $base = sys_get_temp_dir().'/lexicon-client-test-'.uniqid();
+        @mkdir($base.'/en/domains', 0777, true);
+        $path = $base.'/en/domains/artworks.php';
+        file_put_contents($path, <<<'PHP'
+<?php
+
+return [
+    'artwork' => [
+        'draft' => [
+            'label' => 'Draft',
+        ],
+    ],
+    'editor' => [
+        'main_image' => [
+            'title' => 'Main image',
+        ],
+        'details' => [
+            'artwork_title' => [
+                'label' => 'Title',
+            ],
+        ],
+    ],
+];
+PHP);
+
+        $state = new PullStateStore($base.'/pull-state.json');
+        $writer = new LexiconFileWriter(pullState: $state);
+        $outcome = $writer->write([
+            [
+                'language' => 'en',
+                'area' => 'domains.artworks',
+                'relative_path' => 'domains/artworks.php',
+                'hash' => 'hash-empty',
+                'content' => [
+                    'artwork' => [
+                        'draft' => ['label' => 'Draft'],
+                        'test_sync' => 'test sync',
+                    ],
+                    'editor' => [
+                        'main_image' => [
+                            'title' => 'Main image',
+                            'alt' => '',
+                        ],
+                        'details' => [
+                            'artwork_title' => [
+                                'label' => 'Title',
+                                'placeholder' => '',
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        ], [
+            'base_path' => $base,
+            'pattern' => '{locale}/{relative_path}',
+            'format' => 'php',
+            'merge' => 'add_missing',
+        ], allowWithoutState: true);
+
+        $this->assertSame([$path], $outcome['written']);
+        $body = (string) file_get_contents($path);
+        $this->assertStringContainsString("'test_sync' => 'test sync'", $body);
+        $this->assertStringNotContainsString("'alt'", $body);
+        $this->assertStringNotContainsString('placeholder', $body);
+    }
 }

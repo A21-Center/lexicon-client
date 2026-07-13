@@ -92,8 +92,8 @@ class PhpArraySoftMerger
     }
 
     /**
-     * Missing leaves whose immediate parent array already exists in $existing.
-     * Avoids creating whole new branches (often polluted fallback locales).
+     * Missing leaves whose immediate parent array already exists in $existing,
+     * and whose Lexicon value is non-empty (skip blank placeholders).
      *
      * @param  array<string, mixed>  $existing
      * @param  array<string, mixed>  $incoming
@@ -104,12 +104,34 @@ class PhpArraySoftMerger
         $filtered = [];
 
         foreach ($this->missingLeaves($existing, $incoming) as $path => $value) {
+            if (! $this->hasMeaningfulValue($value)) {
+                continue;
+            }
+
             if ($this->parentArrayExists($existing, (string) $path)) {
                 $filtered[$path] = $value;
             }
         }
 
         return $filtered;
+    }
+
+    private function hasMeaningfulValue(mixed $value): bool
+    {
+        if ($value === null) {
+            return false;
+        }
+
+        if (is_string($value)) {
+            return trim($value) !== '';
+        }
+
+        // Arrays should already be flattened to leaves before this filter runs.
+        if (is_array($value)) {
+            return $value !== [];
+        }
+
+        return true;
     }
 
     private function parentArrayExists(array $existing, string $path): bool
