@@ -8,6 +8,8 @@ use Illuminate\Console\Command;
 
 class StatusCommand extends Command
 {
+    use EnsuresLexiconCredentials;
+
     protected $signature = 'lexicon:status';
 
     protected $description = 'Check Lexicon server connectivity and project metadata';
@@ -15,6 +17,11 @@ class StatusCommand extends Command
     public function handle(LexiconManifestReader $manifestReader): int
     {
         $config = $manifestReader->mergedConfig();
+
+        if (! $this->ensureLexiconCredentials($config)) {
+            return self::FAILURE;
+        }
+
         $client = new LexiconHttpClient($config);
 
         try {

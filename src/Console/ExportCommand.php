@@ -8,6 +8,8 @@ use Illuminate\Console\Command;
 
 class ExportCommand extends Command
 {
+    use EnsuresLexiconCredentials;
+
     protected $signature = 'lexicon:export
         {--lang=* : Target language codes}
         {--area=* : Area codes}
@@ -19,6 +21,11 @@ class ExportCommand extends Command
     public function handle(LexiconManifestReader $manifestReader): int
     {
         $config = $manifestReader->mergedConfig();
+
+        if (! $this->ensureLexiconCredentials($config)) {
+            return self::FAILURE;
+        }
+
         $client = new LexiconHttpClient($config);
 
         $languages = $this->option('lang') ?: $config['languages'];

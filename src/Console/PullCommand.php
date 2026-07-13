@@ -9,6 +9,8 @@ use Illuminate\Console\Command;
 
 class PullCommand extends Command
 {
+    use EnsuresLexiconCredentials;
+
     protected $signature = 'lexicon:pull
         {--lang=* : Target language codes}
         {--area=* : Area codes}
@@ -23,6 +25,11 @@ class PullCommand extends Command
     public function handle(LexiconManifestReader $manifestReader, LexiconFileWriter $fileWriter): int
     {
         $config = $manifestReader->mergedConfig();
+
+        if (! $this->ensureLexiconCredentials($config)) {
+            return self::FAILURE;
+        }
+
         $client = new LexiconHttpClient($config);
 
         $languages = $this->option('all') ? $config['languages'] : ($this->option('lang') ?: $config['languages']);

@@ -30,7 +30,10 @@ class InitCommand extends Command
             $this->info('Appended Lexicon variables to .env.example');
         }
 
-        $this->line('Set LEXICON_CLIENT_SECRET in .env manually. Never commit secrets.');
+        $this->line('Copy LEXICON_* into your project .env.');
+        $this->line('Set LEXICON_CLIENT_SECRET manually from Lexicon → Integration Clients.');
+        $this->line('Commands (status/import/export/pull) will refuse to run without that secret.');
+        $this->line('Never commit secrets.');
 
         return self::SUCCESS;
     }

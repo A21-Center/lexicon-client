@@ -2,10 +2,10 @@
 
 namespace A21\LexiconClient\Http;
 
+use A21\LexiconClient\Support\LexiconConfigGuard;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Http;
-use RuntimeException;
 
 class LexiconHttpClient
 {
@@ -78,10 +78,6 @@ class LexiconHttpClient
 
     private function assertConfigured(): void
     {
-        foreach (['api_url', 'client_code', 'project_code', 'secret'] as $key) {
-            if (blank($this->config[$key] ?? null)) {
-                throw new RuntimeException("Missing Lexicon configuration: {$key}");
-            }
-        }
+        LexiconConfigGuard::assertReady($this->config);
     }
 }

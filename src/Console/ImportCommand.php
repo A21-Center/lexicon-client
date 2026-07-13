@@ -10,6 +10,8 @@ use Illuminate\Console\Command;
 
 class ImportCommand extends Command
 {
+    use EnsuresLexiconCredentials;
+
     protected $signature = 'lexicon:import
         {--path= : Local base path to scan}
         {--locale=* : Limit to locales}
@@ -23,6 +25,11 @@ class ImportCommand extends Command
     public function handle(LexiconManifestReader $manifestReader): int
     {
         $config = $manifestReader->mergedConfig();
+
+        if (! $this->ensureLexiconCredentials($config)) {
+            return self::FAILURE;
+        }
+
         $importConfig = (array) ($config['import'] ?? []);
 
         $pathOption = $this->option('path');
