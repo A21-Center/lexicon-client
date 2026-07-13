@@ -49,10 +49,11 @@ php artisan lexicon:import --path=lang
 php artisan lexicon:pull --baseline
 php artisan lexicon:pull
 php artisan lexicon:pull --area=domains.artworks
+php artisan lexicon:pull --replace --area=domains.artworks
 php artisan lexicon:pull --lang=fr --area=catalog --only-approved --dry-run
 ```
 
-Prefer `lexicon:pull` **without** `--force`. After restoring `lang/` from git, run `--baseline` once so unchanged Lexicon areas are not rewritten. Use `--force` only to overwrite even when Lexicon content is unchanged.
+Prefer `lexicon:pull` **without** `--force`. PHP output defaults to `merge=add_missing`: only **new leaf keys under parents that already exist** are injected (comments, order, and local values stay; brand-new branches are skipped). Use `--replace` (or `output.merge=replace`) to overwrite/sync full trees from Lexicon. After restoring `lang/` from git, run `--area=…` or `--baseline` as needed. Use `--force` only to rewrite even when Lexicon content is unchanged.
 
 ## Server setup
 

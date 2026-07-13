@@ -13,6 +13,9 @@ return [
         'base_path' => env('LEXICON_OUTPUT_BASE_PATH', 'lang'),
         'pattern' => env('LEXICON_OUTPUT_PATTERN', '{locale}/{relative_path}'),
         'format' => env('LEXICON_OUTPUT_FORMAT', 'php'),
+        // php default: add missing keys only (preserves comments/formatting).
+        // Use merge=replace or lexicon:pull --replace to overwrite existing values.
+        'merge' => env('LEXICON_OUTPUT_MERGE', 'add_missing'),
     ],
 
     'http' => [

@@ -20,6 +20,7 @@ class PullCommand extends Command
         {--dry-run : Show files without writing}
         {--force : Overwrite files even when Lexicon content hash is unchanged}
         {--full : Full sync — write every file that differs from Lexicon (first setup)}
+        {--replace : For PHP files, overwrite existing keys (default only adds missing keys)}
         {--baseline : Record hashes only for local files that already match Lexicon}
         {--reset-state : Clear saved pull hashes before running}';
 
@@ -87,9 +88,14 @@ class PullCommand extends Command
             return self::FAILURE;
         }
 
+        $outputConfig = $config['output'];
+        if ($this->option('replace')) {
+            $outputConfig['merge'] = 'replace';
+        }
+
         $outcome = $fileWriter->write(
             $result['files'] ?? [],
-            $config['output'],
+            $outputConfig,
             (bool) $this->option('dry-run'),
             (bool) $this->option('force'),
             baseline: (bool) $this->option('baseline'),

@@ -11,6 +11,8 @@ class LexiconFileWriter
         private readonly PhpArrayEncoder $phpEncoder = new PhpArrayEncoder(),
         private readonly RelativePathResolver $relativePaths = new RelativePathResolver(),
         private readonly PhpTranslationParser $phpParser = new PhpTranslationParser(),
+        private readonly PhpArraySoftMerger $softMerger = new PhpArraySoftMerger(),
+        private readonly PhpArrayFilePatcher $phpPatcher = new PhpArrayFilePatcher(),
         private readonly ?PullStateStore $pullState = null,
     ) {}
 
@@ -29,6 +31,7 @@ class LexiconFileWriter
     ): array {
         $basePath = $this->resolveBasePath($outputConfig);
         $format = $this->resolveWriterFormat($outputConfig);
+        $merge = $this->resolveMergeMode($outputConfig, $format);
         $pattern = (string) ($outputConfig['pattern'] ?? $this->defaultPattern($format));
         $state = $this->pullState ?? PullStateStore::defaultPath();
         $knownHashes = $force || $baseline ? [] : $state->hashes();
@@ -52,11 +55,10 @@ class LexiconFileWriter
             $absolutePath = $basePath.DIRECTORY_SEPARATOR.str_replace('/', DIRECTORY_SEPARATOR, $path);
             $stateKey = str_replace('\\', '/', $path);
             $content = is_array($file['content'] ?? null) ? $file['content'] : [];
-            $encoded = $this->encodeContent($content, $format);
             $contentHash = $this->contentHash($file, $content);
 
             if ($baseline) {
-                if (is_file($absolutePath) && $this->isUnchanged($absolutePath, $content, $encoded, $file, $format)) {
+                if (is_file($absolutePath) && $this->isUnchanged($absolutePath, $content, $file, $format, $merge)) {
                     $nextHashes[$stateKey] = $contentHash;
                 }
                 $skipped++;
@@ -66,16 +68,14 @@ class LexiconFileWriter
             if (! $force && $this->shouldSkip(
                 $absolutePath,
                 $content,
-                $encoded,
                 $file,
                 $format,
+                $merge,
                 $knownHashes[$stateKey] ?? null,
                 $contentHash,
                 $allowWithoutState,
             )) {
                 $skipped++;
-                // Only record hash as applied when we truly skip because Lexicon is
-                // unchanged AND local already matches (or seed without area scope).
                 if ($previous = ($knownHashes[$stateKey] ?? null)) {
                     if ($previous === $contentHash) {
                         $nextHashes[$stateKey] = $contentHash;
@@ -83,6 +83,15 @@ class LexiconFileWriter
                 } elseif (! $allowWithoutState) {
                     $nextHashes[$stateKey] = $contentHash;
                 }
+                continue;
+            }
+
+            $encoded = $this->prepareEncodedContent($absolutePath, $content, $format, $merge);
+
+            // Soft merge may no-op (e.g. Lexicon value-only change with add_missing).
+            if (! $force && is_file($absolutePath) && (string) file_get_contents($absolutePath) === $encoded) {
+                $skipped++;
+                $nextHashes[$stateKey] = $contentHash;
                 continue;
             }
 
@@ -115,23 +124,20 @@ class LexiconFileWriter
     private function shouldSkip(
         string $absolutePath,
         array $content,
-        string $encoded,
         array $file,
         string $format,
+        string $merge,
         ?string $previousHash,
         string $contentHash,
         bool $allowWithoutState,
     ): bool {
         $localMatches = is_file($absolutePath)
-            && $this->isUnchanged($absolutePath, $content, $encoded, $file, $format);
+            && $this->isUnchanged($absolutePath, $content, $file, $format, $merge);
 
-        // --area / --full / --force scope: catch up local when it lags Lexicon,
-        // even if the Lexicon hash was already saved (common after git restore).
         if ($allowWithoutState) {
             return $localMatches;
         }
 
-        // Daily pull: rewrite only when Lexicon content hash changed.
         if ($previousHash !== null && $previousHash === $contentHash) {
             return true;
         }
@@ -140,7 +146,6 @@ class LexiconFileWriter
             return false;
         }
 
-        // No prior state: seed hash only (caller stores it), do not mass-write.
         return true;
     }
 
@@ -182,10 +187,10 @@ class LexiconFileWriter
     /**
      * @param  array<string, mixed>  $content
      */
-    private function encodeContent(array $content, string $format): string
+    private function prepareEncodedContent(string $absolutePath, array $content, string $format, string $merge): string
     {
         if ($format === 'php') {
-            return $this->phpEncoder->encode($content);
+            return $this->encodePhpSoft($absolutePath, $content, $merge);
         }
 
         return (string) json_encode(
@@ -196,21 +201,68 @@ class LexiconFileWriter
 
     /**
      * @param  array<string, mixed>  $content
+     */
+    private function encodePhpSoft(string $absolutePath, array $content, string $merge): string
+    {
+        if (! is_file($absolutePath)) {
+            return $this->phpEncoder->encode($content);
+        }
+
+        try {
+            $existing = $this->phpParser->parse($absolutePath);
+        } catch (\Throwable) {
+            return $this->phpEncoder->encode($content);
+        }
+
+        $source = (string) file_get_contents($absolutePath);
+
+        if ($merge === 'add_missing') {
+            $missing = $this->softMerger->missingLeavesWithExistingParents($existing, $content);
+            if ($missing === []) {
+                return $source;
+            }
+
+            $patched = $this->phpPatcher->injectMissingLeaves($source, $missing);
+            if ($patched !== null) {
+                return $patched;
+            }
+
+            $merged = $existing;
+            foreach ($missing as $path => $value) {
+                $merged = $this->setLeaf($merged, (string) $path, $value);
+            }
+
+            return $this->phpEncoder->encode($merged);
+        }
+
+        $merged = $this->softMerger->replace($existing, $content);
+
+        return $this->phpEncoder->encode($merged);
+    }
+
+    /**
+     * @param  array<string, mixed>  $content
      * @param  array<string, mixed>  $file
      */
     private function isUnchanged(
         string $absolutePath,
         array $content,
-        string $encoded,
         array $file,
         string $format,
+        string $merge,
     ): bool {
         if ($format === 'php') {
             try {
-                return $this->normalize($this->phpParser->parse($absolutePath)) === $this->normalize($content);
+                $existing = $this->phpParser->parse($absolutePath);
             } catch (\Throwable) {
                 return false;
             }
+
+            if ($merge === 'add_missing') {
+                return $this->softMerger->missingLeavesWithExistingParents($existing, $content) === [];
+            }
+
+            return $this->normalize($existing) === $this->normalize($content);
         }
 
         $existing = json_decode((string) file_get_contents($absolutePath), true);
@@ -224,7 +276,37 @@ class LexiconFileWriter
             return $existingHash === $file['hash'];
         }
 
+        $encoded = (string) json_encode(
+            $content,
+            JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+        );
+
         return $existingHash === hash('sha256', $encoded);
+    }
+
+    /**
+     * @param  array<string, mixed>  $content
+     * @return array<string, mixed>
+     */
+    private function setLeaf(array $content, string $path, mixed $value): array
+    {
+        $keys = explode('.', $path);
+        $cursor = &$content;
+
+        foreach ($keys as $index => $key) {
+            if ($index === count($keys) - 1) {
+                $cursor[$key] = $value;
+                break;
+            }
+
+            if (! isset($cursor[$key]) || ! is_array($cursor[$key])) {
+                $cursor[$key] = [];
+            }
+
+            $cursor = &$cursor[$key];
+        }
+
+        return $content;
     }
 
     /**
@@ -271,6 +353,21 @@ class LexiconFileWriter
             'json', 'nested_json', 'flat_json' => 'json',
             default => 'json',
         };
+    }
+
+    /**
+     * @param  array<string, mixed>  $outputConfig
+     */
+    private function resolveMergeMode(array $outputConfig, string $format): string
+    {
+        $merge = strtolower((string) ($outputConfig['merge'] ?? ''));
+
+        if (in_array($merge, ['add_missing', 'replace'], true)) {
+            return $merge;
+        }
+
+        // PHP lang files are usually curated in-repo: never mass-rewrite formatting.
+        return $format === 'php' ? 'add_missing' : 'replace';
     }
 
     private function defaultPattern(string $format): string
