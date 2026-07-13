@@ -25,6 +25,7 @@ class LexiconFileWriter
         bool $dryRun = false,
         bool $force = false,
         bool $baseline = false,
+        bool $allowWithoutState = false,
     ): array {
         $basePath = $this->resolveBasePath($outputConfig);
         $format = $this->resolveWriterFormat($outputConfig);
@@ -55,8 +56,6 @@ class LexiconFileWriter
             $contentHash = $this->contentHash($file, $content);
 
             if ($baseline) {
-                // Only mark as applied when local already matches Lexicon.
-                // Divergent files stay out of state so the next pull writes them.
                 if (is_file($absolutePath) && $this->isUnchanged($absolutePath, $content, $encoded, $file, $format)) {
                     $nextHashes[$stateKey] = $contentHash;
                 }
@@ -64,7 +63,16 @@ class LexiconFileWriter
                 continue;
             }
 
-            if (! $force && $this->shouldSkip($absolutePath, $content, $encoded, $file, $format, $knownHashes[$stateKey] ?? null, $contentHash)) {
+            if (! $force && $this->shouldSkip(
+                $absolutePath,
+                $content,
+                $encoded,
+                $file,
+                $format,
+                $knownHashes[$stateKey] ?? null,
+                $contentHash,
+                $allowWithoutState,
+            )) {
                 $skipped++;
                 $nextHashes[$stateKey] = $contentHash;
                 continue;
@@ -104,13 +112,22 @@ class LexiconFileWriter
         string $format,
         ?string $previousHash,
         string $contentHash,
+        bool $allowWithoutState,
     ): bool {
-        // Hash continuity only skips when the local file already matches Lexicon.
-        // This avoids freezing a baseline hash that was recorded before the file
-        // was actually written (common after --baseline with divergent local files).
+        // Lexicon content unchanged since last recorded hash → never rewrite.
         if ($previousHash !== null && $previousHash === $contentHash) {
-            return is_file($absolutePath)
-                && $this->isUnchanged($absolutePath, $content, $encoded, $file, $format);
+            return true;
+        }
+
+        // Lexicon content changed since last pull → write.
+        if ($previousHash !== null && $previousHash !== $contentHash) {
+            return false;
+        }
+
+        // No prior state: seed hash without writing (caller records contentHash).
+        // Next Lexicon change will write. Use --full/--area to write now.
+        if (! $allowWithoutState) {
+            return true;
         }
 
         if (! is_file($absolutePath)) {

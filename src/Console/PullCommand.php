@@ -19,10 +19,11 @@ class PullCommand extends Command
         {--format= : Export format}
         {--dry-run : Show files without writing}
         {--force : Overwrite files even when Lexicon content hash is unchanged}
-        {--baseline : Record Lexicon content hashes without writing files}
-        {--reset-state : Ignore saved pull hashes and re-compare against local files}';
+        {--full : Full sync — write every file that differs from Lexicon (first setup)}
+        {--baseline : Record hashes only for local files that already match Lexicon}
+        {--reset-state : Clear saved pull hashes before running}';
 
-    protected $description = 'Pull translation files from Lexicon and write only files whose Lexicon content changed';
+    protected $description = 'Pull Lexicon translations and write only areas whose Lexicon content hash changed';
 
     public function handle(LexiconManifestReader $manifestReader, LexiconFileWriter $fileWriter): int
     {
@@ -44,6 +45,7 @@ class PullCommand extends Command
 
         $languages = $this->option('all') ? $config['languages'] : ($this->option('lang') ?: $config['languages']);
         $areas = $this->option('all') ? $config['areas'] : ($this->option('area') ?: $config['areas']);
+        $areaFilter = array_values(array_filter((array) $this->option('area')));
         $writerFormat = (string) ($config['output']['format'] ?? 'nested_json');
         $exportFormat = in_array($writerFormat, ['php', 'laravel_php', 'nested_json', 'json'], true)
             ? 'nested_json'
@@ -71,12 +73,27 @@ class PullCommand extends Command
             return self::FAILURE;
         }
 
+        $allowWithoutState = (bool) $this->option('full')
+            || (bool) $this->option('force')
+            || $areaFilter !== [];
+
+        $state = \A21\LexiconClient\Files\PullStateStore::defaultPath();
+        if ($state->hashes() === [] && ! $allowWithoutState && ! $this->option('baseline')) {
+            $this->error('No pull state yet. Refusing a mass rewrite of lang/.');
+            $this->line('First setup: php artisan lexicon:pull --full');
+            $this->line('Or one area:  php artisan lexicon:pull --area=domains.artworks');
+            $this->line('Or baseline:  php artisan lexicon:pull --baseline  (then pull again after Lexicon edits)');
+
+            return self::FAILURE;
+        }
+
         $outcome = $fileWriter->write(
             $result['files'] ?? [],
             $config['output'],
             (bool) $this->option('dry-run'),
             (bool) $this->option('force'),
             baseline: (bool) $this->option('baseline'),
+            allowWithoutState: $allowWithoutState,
         );
 
         $written = $outcome['written'];
