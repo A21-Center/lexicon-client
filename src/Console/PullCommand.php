@@ -18,9 +18,9 @@ class PullCommand extends Command
         {--only-approved : Export only approved translations}
         {--format= : Export format}
         {--dry-run : Show files without writing}
-        {--force : Write even when hash is unchanged}';
+        {--force : Overwrite files even when content is identical}';
 
-    protected $description = 'Pull translation files from Lexicon and write them locally';
+    protected $description = 'Pull translation files from Lexicon and write only changed files locally';
 
     public function handle(LexiconManifestReader $manifestReader, LexiconFileWriter $fileWriter): int
     {
@@ -61,24 +61,37 @@ class PullCommand extends Command
             return self::FAILURE;
         }
 
-        $written = $fileWriter->write(
+        $outcome = $fileWriter->write(
             $result['files'] ?? [],
             $config['output'],
             (bool) $this->option('dry-run'),
             (bool) $this->option('force'),
         );
 
+        $written = $outcome['written'];
+        $skipped = $outcome['skipped'];
+
         if ($this->option('dry-run')) {
-            $this->info('Dry run — files that would be written:');
+            $this->info(sprintf(
+                'Dry run — %d file(s) would be written, %d unchanged:',
+                count($written),
+                $skipped,
+            ));
         } else {
-            $this->info('Pull completed — files written:');
+            $this->info(sprintf(
+                'Pull completed — %d written, %d unchanged:',
+                count($written),
+                $skipped,
+            ));
         }
 
         foreach ($written as $path) {
             $this->line(' - '.$path);
         }
 
-        if ($written === []) {
+        if ($written === [] && $skipped === 0) {
+            $this->warn('No files returned by Lexicon.');
+        } elseif ($written === []) {
             $this->warn('No files changed.');
         }
 

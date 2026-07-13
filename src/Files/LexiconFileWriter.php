@@ -16,7 +16,7 @@ class LexiconFileWriter
     /**
      * @param  list<array<string, mixed>>  $files
      * @param  array<string, mixed>  $outputConfig
-     * @return list<string>
+     * @return array{written: list<string>, skipped: int}
      */
     public function write(array $files, array $outputConfig, bool $dryRun = false, bool $force = false): array
     {
@@ -24,6 +24,7 @@ class LexiconFileWriter
         $format = $this->resolveWriterFormat($outputConfig);
         $pattern = (string) ($outputConfig['pattern'] ?? $this->defaultPattern($format));
         $written = [];
+        $skipped = 0;
 
         foreach ($files as $file) {
             $relativePath = $this->resolveRelativePath($file, $format);
@@ -39,10 +40,11 @@ class LexiconFileWriter
             );
 
             $absolutePath = $basePath.DIRECTORY_SEPARATOR.str_replace('/', DIRECTORY_SEPARATOR, $path);
-            $encoded = $this->encodeContent($file['content'] ?? [], $format);
             $content = is_array($file['content'] ?? null) ? $file['content'] : [];
+            $encoded = $this->encodeContent($content, $format);
 
             if (! $force && is_file($absolutePath) && $this->isUnchanged($absolutePath, $content, $encoded, $file, $format)) {
+                $skipped++;
                 continue;
             }
 
@@ -56,7 +58,10 @@ class LexiconFileWriter
             $written[] = $absolutePath;
         }
 
-        return $written;
+        return [
+            'written' => $written,
+            'skipped' => $skipped,
+        ];
     }
 
     /**
@@ -109,10 +114,15 @@ class LexiconFileWriter
     ): bool {
         if ($format === 'php') {
             try {
-                return $this->phpParser->parse($absolutePath) === $content;
+                return $this->normalize($this->phpParser->parse($absolutePath)) === $this->normalize($content);
             } catch (\Throwable) {
                 return false;
             }
+        }
+
+        $existing = json_decode((string) file_get_contents($absolutePath), true);
+        if (is_array($existing)) {
+            return $this->normalize($existing) === $this->normalize($content);
         }
 
         $existingHash = hash('sha256', (string) file_get_contents($absolutePath));
@@ -122,6 +132,41 @@ class LexiconFileWriter
         }
 
         return $existingHash === hash('sha256', $encoded);
+    }
+
+    /**
+     * Normalize nested translation arrays for semantic equality
+     * (stable key order + scalar string casting).
+     *
+     * @param  array<string, mixed>  $content
+     * @return array<string, mixed>
+     */
+    private function normalize(array $content): array
+    {
+        $normalized = [];
+
+        foreach ($content as $key => $value) {
+            $stringKey = (string) $key;
+
+            if (is_array($value)) {
+                $normalized[$stringKey] = $this->normalize($value);
+                continue;
+            }
+
+            if (is_bool($value)) {
+                $normalized[$stringKey] = $value ? 'true' : 'false';
+            } elseif (is_int($value) || is_float($value)) {
+                $normalized[$stringKey] = (string) $value;
+            } elseif ($value === null) {
+                $normalized[$stringKey] = null;
+            } else {
+                $normalized[$stringKey] = (string) $value;
+            }
+        }
+
+        ksort($normalized);
+
+        return $normalized;
     }
 
     /**
