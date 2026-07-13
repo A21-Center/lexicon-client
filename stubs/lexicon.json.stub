@@ -8,6 +8,16 @@
     "base_path": "public/locales",
     "pattern": "{locale}/{area}.json"
   },
+  "import": {
+    "base_path": "lang",
+    "auto_discover": true,
+    "source_language": "en",
+    "formats": ["php", "json"],
+    "area_code_strategy": "relative_path",
+    "source_pattern": "{base_path}/{locale}/{relative_path}",
+    "default_strategy": "create_only",
+    "exclude": ["vendor", "node_modules", ".git"]
+  },
   "languages": ["fr", "ar", "de"],
   "areas": ["catalog", "settings", "emails"]
 }

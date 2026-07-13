@@ -36,6 +36,7 @@ Optional manifest at project root: `lexicon.json` (no secret in this file).
 | `php artisan lexicon:init` | Create `lexicon.json` + append `.env.example` |
 | `php artisan lexicon:status` | Check server connection and project metadata |
 | `php artisan lexicon:export` | Request export bundle from server |
+| `php artisan lexicon:import` | Scan local `lang/` files and import into Lexicon |
 | `php artisan lexicon:pull` | Export + write JSON files locally |
 | `php artisan lexicon:sync` | Placeholder (source scan coming later) |
 
@@ -43,6 +44,9 @@ Examples:
 
 ```bash
 php artisan lexicon:status
+php artisan lexicon:import --path=lang --dry-run
+php artisan lexicon:import --path=lang
+php artisan lexicon:import --path=lang --force --locale=fr
 php artisan lexicon:pull --all
 php artisan lexicon:pull --lang=fr --area=catalog --only-approved --dry-run
 ```
@@ -51,7 +55,7 @@ php artisan lexicon:pull --lang=fr --area=catalog --only-approved --dry-run
 
 Create an integration client on the Lexicon server (admin API). Copy the secret **once**, then configure this package.
 
-See the Lexicon server docs: `docs/client-package.md`, `docs/integration-api.md`, `docs/export-cli.md`.
+See the Lexicon server docs: `docs/client-package.md`, `docs/client-package-js.md` (npm), `docs/integration-api.md`, `docs/export-cli.md`.
 
 ## Security
 

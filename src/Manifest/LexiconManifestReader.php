@@ -41,6 +41,19 @@ class LexiconManifestReader
                 (array) config('lexicon.output', []),
                 (array) Arr::get($manifest, 'output', []),
             ),
+            'import' => array_merge(
+                (array) config('lexicon.import', [
+                    'base_path' => 'lang',
+                    'auto_discover' => true,
+                    'source_language' => 'en',
+                    'formats' => ['php', 'json'],
+                    'area_code_strategy' => 'relative_path',
+                    'source_pattern' => '{base_path}/{locale}/{relative_path}',
+                    'default_strategy' => 'create_only',
+                    'exclude' => ['vendor', 'node_modules', '.git'],
+                ]),
+                (array) Arr::get($manifest, 'import', []),
+            ),
         ];
     }
 }

@@ -39,6 +39,18 @@ class LexiconHttpClient
             ->json('data');
     }
 
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    public function import(array $payload): array
+    {
+        return $this->request()
+            ->post($this->endpoint('/client/import'), $payload)
+            ->throw()
+            ->json('data');
+    }
+
     private function request(): PendingRequest
     {
         $this->assertConfigured();

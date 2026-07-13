@@ -3,6 +3,7 @@
 namespace A21\LexiconClient;
 
 use A21\LexiconClient\Console\ExportCommand;
+use A21\LexiconClient\Console\ImportCommand;
 use A21\LexiconClient\Console\InitCommand;
 use A21\LexiconClient\Console\PullCommand;
 use A21\LexiconClient\Console\StatusCommand;
@@ -23,6 +24,7 @@ class LexiconClientServiceProvider extends ServiceProvider
                 InitCommand::class,
                 StatusCommand::class,
                 ExportCommand::class,
+                ImportCommand::class,
                 PullCommand::class,
                 SyncCommand::class,
             ]);
