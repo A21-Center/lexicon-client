@@ -55,7 +55,11 @@ class LexiconFileWriter
             $contentHash = $this->contentHash($file, $content);
 
             if ($baseline) {
-                $nextHashes[$stateKey] = $contentHash;
+                // Only mark as applied when local already matches Lexicon.
+                // Divergent files stay out of state so the next pull writes them.
+                if (is_file($absolutePath) && $this->isUnchanged($absolutePath, $content, $encoded, $file, $format)) {
+                    $nextHashes[$stateKey] = $contentHash;
+                }
                 $skipped++;
                 continue;
             }
@@ -101,10 +105,12 @@ class LexiconFileWriter
         ?string $previousHash,
         string $contentHash,
     ): bool {
-        // Prefer Lexicon content-hash continuity: if this area did not change
-        // since the last successful pull, do not rewrite the local file.
+        // Hash continuity only skips when the local file already matches Lexicon.
+        // This avoids freezing a baseline hash that was recorded before the file
+        // was actually written (common after --baseline with divergent local files).
         if ($previousHash !== null && $previousHash === $contentHash) {
-            return true;
+            return is_file($absolutePath)
+                && $this->isUnchanged($absolutePath, $content, $encoded, $file, $format);
         }
 
         if (! is_file($absolutePath)) {
