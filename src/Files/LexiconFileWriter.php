@@ -11,6 +11,7 @@ class LexiconFileWriter
         private readonly PhpArrayEncoder $phpEncoder = new PhpArrayEncoder(),
         private readonly RelativePathResolver $relativePaths = new RelativePathResolver(),
         private readonly PhpTranslationParser $phpParser = new PhpTranslationParser(),
+        private readonly ?PullStateStore $pullState = null,
     ) {}
 
     /**
@@ -18,11 +19,19 @@ class LexiconFileWriter
      * @param  array<string, mixed>  $outputConfig
      * @return array{written: list<string>, skipped: int}
      */
-    public function write(array $files, array $outputConfig, bool $dryRun = false, bool $force = false): array
-    {
+    public function write(
+        array $files,
+        array $outputConfig,
+        bool $dryRun = false,
+        bool $force = false,
+        bool $baseline = false,
+    ): array {
         $basePath = $this->resolveBasePath($outputConfig);
         $format = $this->resolveWriterFormat($outputConfig);
         $pattern = (string) ($outputConfig['pattern'] ?? $this->defaultPattern($format));
+        $state = $this->pullState ?? PullStateStore::defaultPath();
+        $knownHashes = $force || $baseline ? [] : $state->hashes();
+        $nextHashes = $baseline ? [] : $knownHashes;
         $written = [];
         $skipped = 0;
 
@@ -40,28 +49,82 @@ class LexiconFileWriter
             );
 
             $absolutePath = $basePath.DIRECTORY_SEPARATOR.str_replace('/', DIRECTORY_SEPARATOR, $path);
+            $stateKey = str_replace('\\', '/', $path);
             $content = is_array($file['content'] ?? null) ? $file['content'] : [];
             $encoded = $this->encodeContent($content, $format);
+            $contentHash = $this->contentHash($file, $content);
 
-            if (! $force && is_file($absolutePath) && $this->isUnchanged($absolutePath, $content, $encoded, $file, $format)) {
+            if ($baseline) {
+                $nextHashes[$stateKey] = $contentHash;
                 $skipped++;
+                continue;
+            }
+
+            if (! $force && $this->shouldSkip($absolutePath, $content, $encoded, $file, $format, $knownHashes[$stateKey] ?? null, $contentHash)) {
+                $skipped++;
+                $nextHashes[$stateKey] = $contentHash;
                 continue;
             }
 
             if ($dryRun) {
                 $written[] = $absolutePath;
+                $nextHashes[$stateKey] = $contentHash;
                 continue;
             }
 
             File::ensureDirectoryExists(dirname($absolutePath));
             File::put($absolutePath, $encoded);
             $written[] = $absolutePath;
+            $nextHashes[$stateKey] = $contentHash;
+        }
+
+        if (! $dryRun) {
+            $state->save($nextHashes);
         }
 
         return [
             'written' => $written,
             'skipped' => $skipped,
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $content
+     * @param  array<string, mixed>  $file
+     */
+    private function shouldSkip(
+        string $absolutePath,
+        array $content,
+        string $encoded,
+        array $file,
+        string $format,
+        ?string $previousHash,
+        string $contentHash,
+    ): bool {
+        // Prefer Lexicon content-hash continuity: if this area did not change
+        // since the last successful pull, do not rewrite the local file.
+        if ($previousHash !== null && $previousHash === $contentHash) {
+            return true;
+        }
+
+        if (! is_file($absolutePath)) {
+            return false;
+        }
+
+        return $this->isUnchanged($absolutePath, $content, $encoded, $file, $format);
+    }
+
+    /**
+     * @param  array<string, mixed>  $file
+     * @param  array<string, mixed>  $content
+     */
+    private function contentHash(array $file, array $content): string
+    {
+        if (isset($file['hash']) && is_string($file['hash']) && $file['hash'] !== '') {
+            return $file['hash'];
+        }
+
+        return hash('sha256', (string) json_encode($this->normalize($content), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
     }
 
     /**
@@ -135,9 +198,6 @@ class LexiconFileWriter
     }
 
     /**
-     * Normalize nested translation arrays for semantic equality
-     * (stable key order + scalar string casting).
-     *
      * @param  array<string, mixed>  $content
      * @return array<string, mixed>
      */

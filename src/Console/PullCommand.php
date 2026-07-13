@@ -18,9 +18,11 @@ class PullCommand extends Command
         {--only-approved : Export only approved translations}
         {--format= : Export format}
         {--dry-run : Show files without writing}
-        {--force : Overwrite files even when content is identical}';
+        {--force : Overwrite files even when Lexicon content hash is unchanged}
+        {--baseline : Record Lexicon content hashes without writing files}
+        {--reset-state : Ignore saved pull hashes and re-compare against local files}';
 
-    protected $description = 'Pull translation files from Lexicon and write only changed files locally';
+    protected $description = 'Pull translation files from Lexicon and write only files whose Lexicon content changed';
 
     public function handle(LexiconManifestReader $manifestReader, LexiconFileWriter $fileWriter): int
     {
@@ -28,6 +30,14 @@ class PullCommand extends Command
 
         if (! $this->ensureLexiconCredentials($config)) {
             return self::FAILURE;
+        }
+
+        if ($this->option('reset-state')) {
+            $statePath = base_path('.lexicon/pull-state.json');
+            if (is_file($statePath)) {
+                @unlink($statePath);
+                $this->warn('Cleared pull state at '.$statePath);
+            }
         }
 
         $client = new LexiconHttpClient($config);
@@ -66,10 +76,20 @@ class PullCommand extends Command
             $config['output'],
             (bool) $this->option('dry-run'),
             (bool) $this->option('force'),
+            baseline: (bool) $this->option('baseline'),
         );
 
         $written = $outcome['written'];
         $skipped = $outcome['skipped'];
+
+        if ($this->option('baseline')) {
+            $this->info(sprintf(
+                'Baseline recorded — %d Lexicon file hash(es) saved, 0 written.',
+                $skipped,
+            ));
+
+            return self::SUCCESS;
+        }
 
         if ($this->option('dry-run')) {
             $this->info(sprintf(

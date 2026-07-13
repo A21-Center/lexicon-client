@@ -37,7 +37,7 @@ Optional manifest at project root: `lexicon.json` (no secret in this file).
 | `php artisan lexicon:status` | Check server connection and project metadata |
 | `php artisan lexicon:export` | Request export bundle from server |
 | `php artisan lexicon:import` | Scan local `lang/` files and import into Lexicon |
-| `php artisan lexicon:pull` | Export + write JSON files locally |
+| `php artisan lexicon:pull` | Write only files whose Lexicon content hash changed |
 | `php artisan lexicon:sync` | Placeholder (source scan coming later) |
 
 Examples:
@@ -46,10 +46,13 @@ Examples:
 php artisan lexicon:status
 php artisan lexicon:import --path=lang --dry-run
 php artisan lexicon:import --path=lang
-php artisan lexicon:import --path=lang --force --locale=fr
-php artisan lexicon:pull --all
+php artisan lexicon:pull --baseline
+php artisan lexicon:pull
+php artisan lexicon:pull --area=domains.artworks
 php artisan lexicon:pull --lang=fr --area=catalog --only-approved --dry-run
 ```
+
+Prefer `lexicon:pull` **without** `--force`. After restoring `lang/` from git, run `--baseline` once so unchanged Lexicon areas are not rewritten. Use `--force` only to overwrite even when Lexicon content is unchanged.
 
 ## Server setup
 
