@@ -1,0 +1,58 @@
+{
+  "client": "hub",
+  "project": "hub",
+  "environment": "local",
+  "default_locale": "en",
+  "output": {
+    "format": "php",
+    "base_path": "lang",
+    "pattern": "{locale}/{relative_path}"
+  },
+  "import": {
+    "base_path": "lang",
+    "auto_discover": true,
+    "source_language": "en",
+    "formats": ["php", "json"],
+    "area_code_strategy": "relative_path",
+    "source_pattern": "{base_path}/{locale}/{relative_path}",
+    "default_strategy": "create_only",
+    "exclude": ["vendor", "node_modules", ".git"]
+  },
+  "languages": ["fr", "ar", "de"],
+  "areas": ["catalog", "settings", "emails"],
+  "extractors": [
+    {
+      "group": "interface",
+      "type": "files",
+      "layer": "interface",
+      "application": "studio-backend",
+      "module": "interface",
+      "base_path": "lang",
+      "source_language": "en",
+      "formats": ["php", "json"]
+    },
+    {
+      "group": "emails",
+      "type": "blade",
+      "layer": "template",
+      "application": "studio-backend",
+      "module": "emails",
+      "area": "emails",
+      "paths": ["resources/views/emails"]
+    },
+    {
+      "group": "categories",
+      "type": "database",
+      "layer": "database",
+      "application": "hub-backend",
+      "module": "cs",
+      "area": "categories",
+      "entity_type": "category",
+      "table": "categories",
+      "id_column": "id",
+      "code_column": "code",
+      "fields": ["name", "description"],
+      "source_url": "/crm/classifications/categories/{id}"
+    }
+  ]
+}
