@@ -23,6 +23,21 @@ return [
         'prefix' => env('LEXICON_UGC_SYNC_PREFIX', 'api'),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Pull lang files webhook (Lexicon → this app)
+    |--------------------------------------------------------------------------
+    |
+    | When enabled, registers POST /api/localization/pull-lang so Lexicon can
+    | write lang/ files (same effect as `php artisan lexicon:pull`).
+    | Uses the same LEXICON_SYNC_SECRET as UGC sync.
+    |
+    */
+    'pull_lang' => [
+        'enabled' => env('LEXICON_PULL_LANG_ENABLED', true),
+        'prefix' => env('LEXICON_PULL_LANG_PREFIX', 'api'),
+    ],
+
     'manifest' => base_path('lexicon.json'),
 
     'output' => [

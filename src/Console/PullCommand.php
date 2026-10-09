@@ -5,6 +5,7 @@ namespace A21\LexiconClient\Console;
 use A21\LexiconClient\Files\LexiconFileWriter;
 use A21\LexiconClient\Http\LexiconHttpClient;
 use A21\LexiconClient\Manifest\LexiconManifestReader;
+use A21\LexiconClient\Pull\PullLangFilesService;
 use Illuminate\Console\Command;
 
 class PullCommand extends Command
@@ -26,8 +27,11 @@ class PullCommand extends Command
 
     protected $description = 'Pull Lexicon translations and write only areas whose Lexicon content hash changed';
 
-    public function handle(LexiconManifestReader $manifestReader, LexiconFileWriter $fileWriter): int
-    {
+    public function handle(
+        LexiconManifestReader $manifestReader,
+        LexiconFileWriter $fileWriter,
+        PullLangFilesService $pullService,
+    ): int {
         $config = $manifestReader->mergedConfig();
 
         if (! $this->ensureLexiconCredentials($config)) {
@@ -42,31 +46,40 @@ class PullCommand extends Command
             }
         }
 
-        $client = new LexiconHttpClient($config);
+        // Baseline is CLI-only (records hashes without writing).
+        if ($this->option('baseline')) {
+            return $this->runBaseline($config, $fileWriter);
+        }
 
-        $languages = $this->option('all') ? $config['languages'] : ($this->option('lang') ?: $config['languages']);
-        $areas = $this->option('all') ? $config['areas'] : ($this->option('area') ?: $config['areas']);
-        $areaFilter = array_values(array_filter((array) $this->option('area')));
-        $writerFormat = (string) ($config['output']['format'] ?? 'nested_json');
-        $exportFormat = in_array($writerFormat, ['php', 'laravel_php', 'nested_json', 'json'], true)
-            ? 'nested_json'
-            : (string) ($this->option('format') ?: $writerFormat);
+        $areaFilter = array_values(array_filter(array_map('strval', (array) $this->option('area'))));
+        $languages = $this->option('all')
+            ? array_values((array) ($config['languages'] ?? []))
+            : ($this->option('lang')
+                ? array_values(array_filter(array_map('strval', (array) $this->option('lang'))))
+                : array_values((array) ($config['languages'] ?? [])));
+        $areas = $this->option('all')
+            ? array_values((array) ($config['areas'] ?? []))
+            : ($areaFilter !== []
+                ? $areaFilter
+                : array_values((array) ($config['areas'] ?? [])));
 
-        if ($this->option('format')) {
-            $exportFormat = (string) $this->option('format');
-            if (in_array($exportFormat, ['php', 'laravel_php'], true)) {
-                $exportFormat = 'nested_json';
-            }
+        $mode = 'incremental';
+        if ($this->option('full')) {
+            $mode = 'full';
+        } elseif ($areaFilter !== []) {
+            $mode = 'area';
         }
 
         try {
-            $result = $client->export([
-                'project_code' => $config['project_code'],
-                'environment' => $config['environment'],
-                'languages' => array_values((array) $languages),
-                'areas' => array_values((array) $areas),
-                'format' => $exportFormat,
+            $result = $pullService->pull([
+                'project_code' => $config['project_code'] ?? null,
+                'areas' => $areas,
+                'languages' => $languages,
                 'only_approved' => (bool) $this->option('only-approved'),
+                'mode' => $mode,
+                'replace' => (bool) $this->option('replace'),
+                'dry_run' => (bool) $this->option('dry-run'),
+                'force' => (bool) $this->option('force'),
             ]);
         } catch (\Throwable $exception) {
             $this->error('Lexicon pull failed: '.$exception->getMessage());
@@ -74,45 +87,8 @@ class PullCommand extends Command
             return self::FAILURE;
         }
 
-        $allowWithoutState = (bool) $this->option('full')
-            || (bool) $this->option('force')
-            || $areaFilter !== [];
-
-        $state = \A21\LexiconClient\Files\PullStateStore::defaultPath();
-        if ($state->hashes() === [] && ! $allowWithoutState && ! $this->option('baseline')) {
-            $this->error('No pull state yet. Refusing a mass rewrite of lang/.');
-            $this->line('First setup: php artisan lexicon:pull --full');
-            $this->line('Or one area:  php artisan lexicon:pull --area=domains.artworks');
-            $this->line('Or baseline:  php artisan lexicon:pull --baseline  (then pull again after Lexicon edits)');
-
-            return self::FAILURE;
-        }
-
-        $outputConfig = $config['output'];
-        if ($this->option('replace')) {
-            $outputConfig['merge'] = 'replace';
-        }
-
-        $outcome = $fileWriter->write(
-            $result['files'] ?? [],
-            $outputConfig,
-            (bool) $this->option('dry-run'),
-            (bool) $this->option('force'),
-            baseline: (bool) $this->option('baseline'),
-            allowWithoutState: $allowWithoutState,
-        );
-
-        $written = $outcome['written'];
-        $skipped = $outcome['skipped'];
-
-        if ($this->option('baseline')) {
-            $this->info(sprintf(
-                'Baseline recorded — %d Lexicon file hash(es) saved, 0 written.',
-                $skipped,
-            ));
-
-            return self::SUCCESS;
-        }
+        $written = $result['files_written'];
+        $skipped = $result['skipped'];
 
         if ($this->option('dry-run')) {
             $this->info(sprintf(
@@ -137,6 +113,49 @@ class PullCommand extends Command
         } elseif ($written === []) {
             $this->warn('No files changed.');
         }
+
+        return self::SUCCESS;
+    }
+
+    /**
+     * @param  array<string, mixed>  $config
+     */
+    private function runBaseline(array $config, LexiconFileWriter $fileWriter): int
+    {
+        $client = new LexiconHttpClient($config);
+        $writerFormat = (string) ($config['output']['format'] ?? 'nested_json');
+        $exportFormat = in_array($writerFormat, ['php', 'laravel_php', 'nested_json', 'json'], true)
+            ? 'nested_json'
+            : $writerFormat;
+
+        try {
+            $result = $client->export([
+                'project_code' => $config['project_code'],
+                'environment' => $config['environment'],
+                'languages' => array_values((array) ($config['languages'] ?? [])),
+                'areas' => array_values((array) ($config['areas'] ?? [])),
+                'format' => $exportFormat,
+                'only_approved' => (bool) $this->option('only-approved'),
+            ]);
+        } catch (\Throwable $exception) {
+            $this->error('Lexicon pull failed: '.$exception->getMessage());
+
+            return self::FAILURE;
+        }
+
+        $outcome = $fileWriter->write(
+            $result['files'] ?? [],
+            $config['output'] ?? [],
+            dryRun: false,
+            force: false,
+            baseline: true,
+            allowWithoutState: true,
+        );
+
+        $this->info(sprintf(
+            'Baseline recorded — %d Lexicon file hash(es) saved, 0 written.',
+            $outcome['skipped'],
+        ));
 
         return self::SUCCESS;
     }
