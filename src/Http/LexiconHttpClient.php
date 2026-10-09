@@ -71,6 +71,7 @@ class LexiconHttpClient
      * @param  array{
      *     application: string,
      *     project_code?: string,
+     *     areas?: list<string>,
      *     replace_unmentioned?: bool,
      *     results: list<array{full_key: string, status: string, evidence?: list<array{path: string, line?: int}>}>
      * }  $payload
@@ -80,6 +81,25 @@ class LexiconHttpClient
     {
         return $this->request(timeout: (int) config('lexicon.http.import_timeout', 180))
             ->post($this->endpoint('/integrations/usage-report'), $payload)
+            ->throw()
+            ->json('data');
+    }
+
+    /**
+     * Fetch active full_keys for a Lexicon project (usage-scan catalog).
+     *
+     * @param  list<string>  $areas
+     * @return array{project_code?: string, areas?: list<string>, keys?: list<string>, count?: int}
+     */
+    public function keyCatalog(string $projectCode, array $areas = []): array
+    {
+        $query = ['project_code' => $projectCode];
+        if ($areas !== []) {
+            $query['areas'] = array_values($areas);
+        }
+
+        return $this->request(timeout: (int) config('lexicon.http.import_timeout', 180))
+            ->get($this->endpoint('/integrations/key-catalog'), $query)
             ->throw()
             ->json('data');
     }

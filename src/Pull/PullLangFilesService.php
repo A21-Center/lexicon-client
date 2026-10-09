@@ -20,6 +20,7 @@ class PullLangFilesService
      * @param  array{
      *   project_code?: string|null,
      *   areas?: list<string>|null,
+     *   keys?: list<string>|null,
      *   languages?: list<string>|null,
      *   only_approved?: bool,
      *   mode?: string,
@@ -39,14 +40,19 @@ class PullLangFilesService
     {
         $config = $this->manifestReader->mergedConfig();
         $mode = strtolower((string) ($options['mode'] ?? 'incremental'));
-        if (! in_array($mode, ['incremental', 'full', 'area'], true)) {
-            throw new InvalidArgumentException('Invalid pull mode. Use incremental, full, or area.');
+        if (! in_array($mode, ['incremental', 'full', 'area', 'keys'], true)) {
+            throw new InvalidArgumentException('Invalid pull mode. Use incremental, full, area, or keys.');
         }
 
         $areas = array_values(array_filter(array_map('strval', (array) ($options['areas'] ?? []))));
+        $keys = array_values(array_filter(array_map('strval', (array) ($options['keys'] ?? []))));
         $languages = array_values(array_filter(array_map('strval', (array) ($options['languages'] ?? []))));
 
-        if ($mode === 'area' && $areas === []) {
+        if ($mode === 'keys' && $keys === []) {
+            throw new InvalidArgumentException('Mode keys requires at least one key.');
+        }
+
+        if ($mode === 'area' && $areas === [] && $keys === []) {
             throw new InvalidArgumentException('Mode area requires at least one area code.');
         }
 
@@ -70,20 +76,25 @@ class PullLangFilesService
 
         $client = new LexiconHttpClient($config);
 
+        $exportPayload = [
+            'project_code' => $projectCode,
+            'environment' => $config['environment'] ?? null,
+            'languages' => $languages,
+            'areas' => $exportAreas,
+            'format' => $exportFormat,
+            'only_approved' => (bool) ($options['only_approved'] ?? false),
+        ];
+        if ($keys !== []) {
+            $exportPayload['keys'] = $keys;
+        }
+
         try {
-            $result = $client->export([
-                'project_code' => $projectCode,
-                'environment' => $config['environment'] ?? null,
-                'languages' => $languages,
-                'areas' => $exportAreas,
-                'format' => $exportFormat,
-                'only_approved' => (bool) ($options['only_approved'] ?? false),
-            ]);
+            $result = $client->export($exportPayload);
         } catch (\Throwable $exception) {
             throw new RuntimeException('Lexicon pull failed: '.$exception->getMessage(), 0, $exception);
         }
 
-        $allowWithoutState = $mode === 'full' || $mode === 'area' || (bool) ($options['force'] ?? false);
+        $allowWithoutState = $mode === 'full' || $mode === 'area' || $mode === 'keys' || $keys !== [] || (bool) ($options['force'] ?? false);
         $state = PullStateStore::defaultPath();
 
         if ($state->hashes() === [] && ! $allowWithoutState) {

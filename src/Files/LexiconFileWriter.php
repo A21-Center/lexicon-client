@@ -95,15 +95,18 @@ class LexiconFileWriter
                 continue;
             }
 
+            // Never expose absolute server paths in API/CLI summaries.
+            $safePath = $this->toSafeDisplayPath($absolutePath, $basePath, $path);
+
             if ($dryRun) {
-                $written[] = $absolutePath;
+                $written[] = $safePath;
                 $nextHashes[$stateKey] = $contentHash;
                 continue;
             }
 
             File::ensureDirectoryExists(dirname($absolutePath));
             File::put($absolutePath, $encoded);
-            $written[] = $absolutePath;
+            $written[] = $safePath;
             $nextHashes[$stateKey] = $contentHash;
         }
 
@@ -389,5 +392,28 @@ class LexiconFileWriter
         }
 
         return rtrim(base_path($configured), DIRECTORY_SEPARATOR);
+    }
+
+    /**
+     * Prefer project-relative paths (e.g. lang/fr/common/fields.php) over absolute server paths.
+     */
+    private function toSafeDisplayPath(string $absolutePath, string $basePath, string $patternPath): string
+    {
+        $normalizedAbsolute = str_replace('\\', '/', $absolutePath);
+        $projectRoot = str_replace('\\', '/', rtrim((string) base_path(), '/'));
+
+        if ($projectRoot !== '' && str_starts_with($normalizedAbsolute, $projectRoot.'/')) {
+            return substr($normalizedAbsolute, strlen($projectRoot) + 1);
+        }
+
+        $normalizedBase = str_replace('\\', '/', rtrim($basePath, '/'));
+        $leaf = trim(str_replace('\\', '/', $patternPath), '/');
+        if ($leaf !== '') {
+            $baseName = basename($normalizedBase);
+
+            return ($baseName !== '' ? $baseName.'/' : '').$leaf;
+        }
+
+        return basename($normalizedAbsolute);
     }
 }

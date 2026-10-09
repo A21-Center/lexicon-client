@@ -38,6 +38,20 @@ return [
         'prefix' => env('LEXICON_PULL_LANG_PREFIX', 'api'),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Scan usage webhook (Lexicon → this app)
+    |--------------------------------------------------------------------------
+    |
+    | When enabled, registers POST /api/localization/scan-usage so Lexicon can
+    | trigger lexicon:scan-usage remotely. Uses the same LEXICON_SYNC_SECRET.
+    |
+    */
+    'scan_usage' => [
+        'enabled' => env('LEXICON_SCAN_USAGE_ENABLED', true),
+        'prefix' => env('LEXICON_SCAN_USAGE_PREFIX', 'api'),
+    ],
+
     'manifest' => base_path('lexicon.json'),
 
     'output' => [

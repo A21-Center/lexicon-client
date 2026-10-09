@@ -11,7 +11,8 @@ class PhpArrayEncoder
     {
         $exported = var_export($this->normalize($content), true);
         $exported = preg_replace('/^([ ]*)(.*)/m', '$1$1$2', $exported) ?? $exported;
-        $exported = str_replace(['array (', ')'], ['[', ']'], $exported);
+        // Convert array() to [] without touching parentheses inside string literals.
+        $exported = $this->convertArraySyntax($exported);
         $exported = preg_replace('/=>\s*\n\s*\[/', '=> [', $exported) ?? $exported;
 
         return "<?php\n\nreturn ".$exported.";\n";
@@ -32,5 +33,54 @@ class PhpArrayEncoder
         }
 
         return $normalized;
+    }
+
+    /**
+     * Replace `array (` ... `)` with `[` ... `]` while leaving `)` inside quotes intact.
+     */
+    private function convertArraySyntax(string $exported): string
+    {
+        $exported = preg_replace('/\barray\s*\(/', '[', $exported) ?? $exported;
+
+        $out = '';
+        $len = strlen($exported);
+        $quote = null;
+        $escape = false;
+
+        for ($i = 0; $i < $len; $i++) {
+            $ch = $exported[$i];
+
+            if ($quote !== null) {
+                $out .= $ch;
+                if ($escape) {
+                    $escape = false;
+                    continue;
+                }
+                // Single backslash — must be PHP '\\' (one char), not '\\\\' (two).
+                if ($ch === "\\") {
+                    $escape = true;
+                    continue;
+                }
+                if ($ch === $quote) {
+                    $quote = null;
+                }
+                continue;
+            }
+
+            if ($ch === "'" || $ch === '"') {
+                $quote = $ch;
+                $out .= $ch;
+                continue;
+            }
+
+            if ($ch === ')') {
+                $out .= ']';
+                continue;
+            }
+
+            $out .= $ch;
+        }
+
+        return $out;
     }
 }

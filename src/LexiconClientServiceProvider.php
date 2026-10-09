@@ -49,6 +49,7 @@ class LexiconClientServiceProvider extends ServiceProvider
 
         $this->bootUgcSyncRoutes();
         $this->bootPullLangRoutes();
+        $this->bootScanUsageRoutes();
     }
 
     private function bootUgcSyncRoutes(): void
@@ -75,5 +76,18 @@ class LexiconClientServiceProvider extends ServiceProvider
         Route::middleware('api')
             ->prefix($prefix)
             ->group(__DIR__.'/../routes/pull-lang.php');
+    }
+
+    private function bootScanUsageRoutes(): void
+    {
+        if (! filter_var(config('lexicon.scan_usage.enabled', true), FILTER_VALIDATE_BOOL)) {
+            return;
+        }
+
+        $prefix = trim((string) config('lexicon.scan_usage.prefix', 'api'), '/');
+
+        Route::middleware('api')
+            ->prefix($prefix)
+            ->group(__DIR__.'/../routes/scan-usage.php');
     }
 }

@@ -55,16 +55,44 @@ BLADE);
         $this->assertSame(['age_artist', 'flat.key', 'group.item', 'nested.title'], $keys);
     }
 
-    public function test_collect_keys_applies_laravel_group_prefix(): void
+    public function test_normalize_and_message_helper_matching(): void
     {
-        $dir = $this->makeTempDir();
-        $file = $dir.'/auth.php';
-        file_put_contents($file, "<?php\nreturn ['sign_up' => ['title' => 'Sign up']];\n");
-
         $scanner = new KeyUsageScanner();
-        $keys = $scanner->collectKeysFromTranslationFiles([$file], [$file => 'root/auth']);
+        $this->assertSame(
+            'gallery.account.new_billing_address.intro',
+            $scanner->normalizeKeyForLexicon('emails/gallery/account/new-billing-address.intro'),
+        );
+        $this->assertSame(
+            'studio.artwork.unauthorized',
+            $scanner->normalizeKeyForLexicon('api/studio/artwork.unauthorized'),
+        );
 
-        $this->assertSame(['root/auth.sign_up.title'], $keys);
+        $dir = $this->makeTempDir();
+        file_put_contents($dir.'/ArtworkMessage.php', <<<'PHP'
+<?php
+class ArtworkMessage {
+    public static function get(string $key, array $replace = []): string {
+        return (string) __('api/studio/artwork.'.$key, $replace);
+    }
+}
+PHP);
+        file_put_contents($dir.'/Controller.php', <<<'PHP'
+<?php
+$message = ArtworkMessage::get('unauthorized');
+$title = __('emails/gallery/account/new-billing-address.intro');
+PHP);
+
+        $found = $scanner->scan([$dir]);
+        $found = $scanner->expandMessageHelperUsage([$dir], $found);
+        $results = $scanner->buildResults(
+            ['studio.artwork.unauthorized', 'gallery.account.new_billing_address.intro', 'missing.key'],
+            $found,
+        );
+
+        $byKey = collect($results)->keyBy('full_key');
+        $this->assertSame('used', $byKey['studio.artwork.unauthorized']['status']);
+        $this->assertSame('used', $byKey['gallery.account.new_billing_address.intro']['status']);
+        $this->assertSame('unused', $byKey['missing.key']['status']);
     }
 
     private function makeTempDir(): string

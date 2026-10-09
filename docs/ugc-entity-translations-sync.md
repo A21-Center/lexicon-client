@@ -10,7 +10,7 @@ Lexicon server remains the editing / MT source of truth for **all translation
 layers** (`content`, `interface`, `database`, `template`). Google MT suggestions
 can be generated and accepted on any layer. The outbound UGC sync webhook below
 is primarily used for CMS-style `content` / entity fields that consumers mirror
-locally. After accept / edit / approve / force retranslate, Lexicon POSTs into
+locally. After accept / edit / approve, Lexicon POSTs into
 this app.
 
 ## Quick install

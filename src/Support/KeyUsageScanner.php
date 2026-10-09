@@ -69,6 +69,8 @@ class KeyUsageScanner
      */
     public function buildResults(array $catalogKeys, array $foundInCode): array
     {
+        $index = $this->buildNormalizedEvidenceIndex($foundInCode);
+
         $results = [];
         foreach ($catalogKeys as $fullKey) {
             $key = trim((string) $fullKey);
@@ -76,7 +78,7 @@ class KeyUsageScanner
                 continue;
             }
 
-            $evidence = $foundInCode[$key] ?? [];
+            $evidence = $index[$key] ?? $foundInCode[$key] ?? [];
             $results[] = [
                 'full_key' => $key,
                 'status' => $evidence !== [] ? 'used' : 'unused',
@@ -85,6 +87,128 @@ class KeyUsageScanner
         }
 
         return $results;
+    }
+
+    /**
+     * Normalize client literals toward Lexicon full_key form.
+     * Examples:
+     * - api/studio/artwork.x → studio.artwork.x
+     * - emails/gallery/account/new-billing-address.intro → gallery.account.new_billing_address.intro
+     */
+    public function normalizeKeyForLexicon(string $key): string
+    {
+        $normalized = str_replace(['/', '-'], ['.', '_'], trim($key));
+        foreach (['emails.', 'api.'] as $prefix) {
+            if (str_starts_with($normalized, $prefix)) {
+                $normalized = substr($normalized, strlen($prefix));
+            }
+        }
+
+        return $normalized;
+    }
+
+    /**
+     * Expand scan hits with Message::get('leaf') resolved against __('prefix.'.$key) helpers.
+     *
+     * @param  list<string>  $roots
+     * @param  array<string, list<array{path: string, line: int}>>  $foundInCode
+     * @return array<string, list<array{path: string, line: int}>>
+     */
+    public function expandMessageHelperUsage(array $roots, array $foundInCode): array
+    {
+        $files = [];
+        foreach ($roots as $root) {
+            $root = rtrim($root, DIRECTORY_SEPARATOR);
+            if ($root === '' || ! is_dir($root)) {
+                continue;
+            }
+
+            $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root));
+            /** @var SplFileInfo $file */
+            foreach ($iterator as $file) {
+                if (! $file->isFile() || ! str_ends_with(strtolower($file->getFilename()), '.php')) {
+                    continue;
+                }
+                $path = $file->getPathname();
+                if ($this->shouldSkip($path)) {
+                    continue;
+                }
+                $files[] = $path;
+            }
+        }
+
+        $classToPrefix = [];
+        foreach ($files as $path) {
+            $contents = @file_get_contents($path);
+            if (! is_string($contents) || $contents === '') {
+                continue;
+            }
+            if (! preg_match('/class\\s+(\\w+Message)\\b/', $contents, $classMatch)) {
+                continue;
+            }
+            if (! preg_match("/__\\(\\s*['\"]([^'\"]+)['\"]\\s*\\.\\s*\\\$key/", $contents, $prefixMatch)) {
+                continue;
+            }
+            $classToPrefix[$classMatch[1]] = $this->normalizeKeyForLexicon(rtrim($prefixMatch[1], '.'));
+        }
+
+        if ($classToPrefix === []) {
+            return $foundInCode;
+        }
+
+        $expanded = $foundInCode;
+        foreach ($files as $path) {
+            $contents = @file_get_contents($path);
+            if (! is_string($contents) || $contents === '') {
+                continue;
+            }
+            $relative = $this->relativePath($path);
+            if (! preg_match_all(
+                "/(\\w+Message)::get\\(\\s*['\"]([^'\"]+)['\"]/u",
+                $contents,
+                $calls,
+                PREG_OFFSET_CAPTURE,
+            )) {
+                continue;
+            }
+
+            foreach ($calls[1] as $idx => $classHit) {
+                $class = (string) $classHit[0];
+                $leaf = trim((string) $calls[2][$idx][0]);
+                $prefix = $classToPrefix[$class] ?? null;
+                if ($prefix === null || $leaf === '' || str_contains($leaf, '$') || str_contains($leaf, '{')) {
+                    continue;
+                }
+                $full = $prefix.'.'.$this->normalizeKeyForLexicon($leaf);
+                $offset = (int) $calls[2][$idx][1];
+                $line = substr_count(substr($contents, 0, $offset), "\n") + 1;
+                $expanded[$full] ??= [];
+                $expanded[$full][] = ['path' => $relative, 'line' => $line];
+            }
+        }
+
+        return $expanded;
+    }
+
+    /**
+     * @param  array<string, list<array{path: string, line: int}>>  $foundInCode
+     * @return array<string, list<array{path: string, line: int}>>
+     */
+    private function buildNormalizedEvidenceIndex(array $foundInCode): array
+    {
+        $index = [];
+        foreach ($foundInCode as $rawKey => $evidence) {
+            $variants = array_values(array_unique(array_filter([
+                (string) $rawKey,
+                $this->normalizeKeyForLexicon((string) $rawKey),
+                str_replace('/', '.', (string) $rawKey),
+            ])));
+            foreach ($variants as $variant) {
+                $index[$variant] = array_values(array_merge($index[$variant] ?? [], $evidence));
+            }
+        }
+
+        return $index;
     }
 
     /**
