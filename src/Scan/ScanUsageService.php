@@ -109,9 +109,8 @@ class ScanUsageService
         }
 
         $found = $scanner->scan($roots);
-        if ($catalogMode === 'lexicon' || $explicitKeys !== []) {
-            $found = $scanner->expandMessageHelperUsage($roots, $found);
-        }
+        $found = $scanner->expandMessageHelperUsage($roots, $found);
+        $found = $scanner->expandConcatenatedPrefixUsage($roots, $found);
         $found = $this->mergeEvidenceLangUsage(
             $scanner,
             $found,
