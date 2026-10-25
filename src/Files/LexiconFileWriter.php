@@ -52,7 +52,10 @@ class LexiconFileWriter
                 $pattern,
             );
 
-            $absolutePath = $basePath.DIRECTORY_SEPARATOR.str_replace('/', DIRECTORY_SEPARATOR, $path);
+            $absolutePath = $this->assertPathInsideBase(
+                $basePath.DIRECTORY_SEPARATOR.str_replace('/', DIRECTORY_SEPARATOR, $path),
+                $basePath,
+            );
             $stateKey = str_replace('\\', '/', $path);
             $content = is_array($file['content'] ?? null) ? $file['content'] : [];
             $contentHash = $this->contentHash($file, $content);
@@ -392,6 +395,37 @@ class LexiconFileWriter
         }
 
         return rtrim(base_path($configured), DIRECTORY_SEPARATOR);
+    }
+
+    /**
+     * Reject writes that escape the configured language base directory.
+     */
+    private function assertPathInsideBase(string $absolutePath, string $basePath): string
+    {
+        $normalizedTarget = str_replace('\\', '/', $absolutePath);
+        $normalizedBase = rtrim(str_replace('\\', '/', $basePath), '/');
+
+        if (str_contains($normalizedTarget, '..')
+            || (! str_starts_with($normalizedTarget, $normalizedBase.'/')
+                && $normalizedTarget !== $normalizedBase)
+        ) {
+            throw new \InvalidArgumentException('Invalid lang path: must stay under the configured base_path.');
+        }
+
+        $parent = dirname($absolutePath);
+        if (is_dir($parent)) {
+            $realParent = realpath($parent);
+            $realBase = realpath($basePath);
+            if ($realParent !== false && $realBase !== false) {
+                $realParent = str_replace('\\', '/', $realParent);
+                $realBase = rtrim(str_replace('\\', '/', $realBase), '/');
+                if (! str_starts_with($realParent, $realBase.'/') && $realParent !== $realBase) {
+                    throw new \InvalidArgumentException('Invalid lang path: must stay under the configured base_path.');
+                }
+            }
+        }
+
+        return $absolutePath;
     }
 
     /**

@@ -58,7 +58,7 @@ class PullLangFilesController extends Controller
                 'success' => false,
                 'files_written' => [],
                 'skipped' => 0,
-                'errors' => [$exception->getMessage()],
+                'errors' => ['Pull lang files failed.'],
             ], 500);
         }
 

@@ -186,9 +186,41 @@ class ScanUsageService
                 base_path('public/js'),
                 base_path('resources/js'),
             ], 'is_dir'));
+
+            return $paths;
         }
 
-        return $paths;
+        $projectRoot = rtrim(str_replace('\\', '/', (string) base_path()), '/');
+        $resolved = [];
+
+        foreach ($paths as $path) {
+            $candidate = str_replace('\\', '/', trim($path));
+            if ($candidate === '' || str_contains($candidate, "\0")) {
+                throw new InvalidArgumentException('Invalid scan path.');
+            }
+
+            if (! str_starts_with($candidate, '/')) {
+                $candidate = $projectRoot.'/'.ltrim($candidate, '/');
+            }
+
+            $real = realpath($candidate);
+            if ($real === false) {
+                throw new InvalidArgumentException('Scan path does not exist or is not readable.');
+            }
+
+            $real = rtrim(str_replace('\\', '/', $real), '/');
+            if ($real !== $projectRoot && ! str_starts_with($real, $projectRoot.'/')) {
+                throw new InvalidArgumentException('Scan path must stay under the application root.');
+            }
+
+            if (! is_dir($real)) {
+                throw new InvalidArgumentException('Scan path must be a directory.');
+            }
+
+            $resolved[] = $real;
+        }
+
+        return array_values(array_unique($resolved));
     }
 
     /**

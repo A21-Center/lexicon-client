@@ -67,7 +67,7 @@ class ScanUsageController extends Controller
             return response()->json([
                 'message' => 'Scan usage failed.',
                 'success' => false,
-                'errors' => [$exception->getMessage()],
+                'errors' => ['Scan usage failed.'],
             ], 500);
         }
 

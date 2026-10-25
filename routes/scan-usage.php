@@ -15,5 +15,5 @@ use Illuminate\Support\Facades\Route;
 */
 
 Route::post('localization/scan-usage', ScanUsageController::class)
-    ->middleware(VerifyLexiconSyncSecret::class)
+    ->middleware(['throttle:30,1', VerifyLexiconSyncSecret::class])
     ->name('lexicon.localization.scan-usage');
