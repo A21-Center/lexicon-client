@@ -205,7 +205,7 @@ class KeyRewriteService
     private function defaultLangRoots(array $roots): array
     {
         if ($roots !== []) {
-            return $roots;
+            return $this->resolveExistingRoots($roots);
         }
 
         $candidates = [base_path('lang'), base_path('resources/lang')];
@@ -220,7 +220,7 @@ class KeyRewriteService
     private function defaultCodeRoots(array $roots): array
     {
         if ($roots !== []) {
-            return $roots;
+            return $this->resolveExistingRoots($roots);
         }
 
         $candidates = [
@@ -228,11 +228,38 @@ class KeyRewriteService
             base_path('app'),
             base_path('src'),
             base_path('themes'),
-            // Studio keeps t()/i18n literals under public/js (and other public assets).
+            // Studio/Gallery keep t()/i18n literals under public/js (and other public assets).
             base_path('public'),
         ];
 
         return array_values(array_filter($candidates, 'is_dir'));
+    }
+
+    /**
+     * Resolve relative roots against the app base path (Lexicon may send "public/js").
+     *
+     * @param  list<string>  $roots
+     * @return list<string>
+     */
+    private function resolveExistingRoots(array $roots): array
+    {
+        $resolved = [];
+        foreach ($roots as $root) {
+            $candidate = trim(str_replace('\\', '/', (string) $root));
+            if ($candidate === '' || str_contains($candidate, "\0")) {
+                continue;
+            }
+
+            if (! str_starts_with($candidate, '/') && ! preg_match('#^[A-Za-z]:/#', $candidate)) {
+                $candidate = rtrim(str_replace('\\', '/', (string) base_path()), '/').'/'.ltrim($candidate, '/');
+            }
+
+            if (is_dir($candidate)) {
+                $resolved[] = $candidate;
+            }
+        }
+
+        return array_values(array_unique($resolved));
     }
 
     /**

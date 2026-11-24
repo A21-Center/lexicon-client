@@ -168,6 +168,37 @@ BLADE);
         $this->assertStringNotContainsString('root/configuration.artistic_career.question', $js);
     }
 
+    public function test_rewrites_gallery_t_with_fallback_arg_in_public_js(): void
+    {
+        $base = $this->makeTempDir();
+        $jsDir = $base.'/public/js/pages';
+        mkdir($jsDir, 0777, true);
+        file_put_contents(
+            $jsDir.'/settings.js',
+            "const retryButton = create('button', { text: t('root.settings.client.load_errors.retry', {}, 'Retry') });\n",
+        );
+
+        $service = new KeyRewriteService();
+        $summary = $service->rewrite(
+            [
+                'root.settings.client.load_errors.retry' => 'errors.general.client.load_errors.retry',
+            ],
+            [$base.'/public/js'],
+            [],
+            dryRun: false,
+            doLang: false,
+            doCode: true,
+        );
+
+        $this->assertNotEmpty($summary['code']);
+        $js = (string) file_get_contents($jsDir.'/settings.js');
+        $this->assertStringContainsString(
+            "t('errors.general.client.load_errors.retry', {}, 'Retry')",
+            $js,
+        );
+        $this->assertStringNotContainsString('root.settings.client.load_errors.retry', $js);
+    }
+
     public function test_rewrites_blade_slash_and_js_dot_variants_together(): void
     {
         $base = $this->makeTempDir();

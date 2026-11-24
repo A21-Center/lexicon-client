@@ -1,7 +1,7 @@
 {
     "name": "a21/lexicon-client",
     "description": "Laravel client for Lexicon: export, pull, import, extract/push, UGC sync, pull-lang, and scan-usage webhooks.",
-    "version": "1.5.6",
+    "version": "1.5.7",
     "type": "library",
     "license": "MIT",
     "keywords": [
